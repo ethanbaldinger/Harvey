@@ -40,16 +40,18 @@ LOG = logging.getLogger("harbie.pa")
 
 def load_config() -> dict:
     """Load configuration from config.json or environment."""
-    candidate_paths = [
-        Path(os.getenv("CONFIG_PATH", "")),
+    candidate_paths = []
+    if os.getenv("CONFIG_PATH"):
+        candidate_paths.append(Path(os.getenv("CONFIG_PATH")))
+    candidate_paths.extend([
         Path("/home/badangel/mw-mirror/harvey/harbie/config.json"),
         Path(__file__).parent / "config.json",
         Path.cwd() / "harbie" / "config.json",
         Path.cwd() / "config.json",
-    ]
+    ])
     cfg = {}
     for p in candidate_paths:
-        if p and p.exists():
+        if p and p.exists() and p.is_file():
             try:
                 cfg = json.loads(p.read_text(encoding="utf-8"))
                 LOG.info("Loaded configuration from %s", p)
@@ -73,8 +75,8 @@ def load_config() -> dict:
             "database": db_name,
         },
         # Micro-burst configuration
-        "burst_min": int(os.getenv("BURST_MIN") or cfg.get("burst_min", BURST_MIN_LOOKUPS)),
-        "burst_max": int(os.getenv("BURST_MAX") or cfg.get("burst_max", BURST_MAX_LOOKUPS)),
+        "burst_min": int(os.getenv("BURST_MIN_LOOKUPS") or cfg.get("burst_min", BURST_MIN_LOOKUPS)),
+        "burst_max": int(os.getenv("BURST_MAX_LOOKUPS") or cfg.get("burst_max", BURST_MAX_LOOKUPS)),
         "burst_duration_sec": float(os.getenv("BURST_DURATION_SEC") or cfg.get("burst_duration_sec", BURST_DURATION_SEC)),
         "rest_mean_sec": float(os.getenv("REST_MEAN_SEC") or cfg.get("rest_mean_sec", REST_MEAN_SEC)),
         "rest_std_dev_sec": float(os.getenv("REST_STD_DEV_SEC") or cfg.get("rest_std_dev_sec", REST_STD_DEV_SEC)),
@@ -93,6 +95,15 @@ def main():
 
     import mysql.connector
 
+    # Ensure mw-mirror parent directory is in sys.path for mw.store access
+    for search_dir in [
+        Path(__file__).resolve().parent.parent.parent,  # e.g. /home/badangel/mw-mirror
+        Path(__file__).resolve().parent.parent,         # e.g. /home/badangel/mw-mirror/harvey
+        Path("/home/badangel/mw-mirror"),
+    ]:
+        if (search_dir / "mw").is_dir() and str(search_dir) not in sys.path:
+            sys.path.insert(0, str(search_dir))
+
     def get_pa_mysql():
         return mysql.connector.connect(
             host=config["mysql"]["host"],
@@ -106,27 +117,34 @@ def main():
     LOG.info("Connecting to PythonAnywhere database '%s'...", config["mysql"]["database"])
     store = QueueStore(get_pa_mysql, is_mysql=True)
 
-    # Persistence callback: save snapshots directly into badangel$mw.snapshot
+    # Persistence callback: save snapshots into canonical mw mirror tables
     def persist_snapshot(word: str, payload: any, result_kind: str):
+        if not payload:
+            return
         try:
-            import hashlib
-            payload_json = json.dumps(payload) if payload else "[]"
-            sha = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
-            conn = get_pa_mysql()
-            cur = conn.cursor()
             try:
-                cur.execute(
-                    """INSERT INTO snapshot (word, payload, sha256, worker, created_at)
-                       VALUES (%s, %s, %s, 'HARBIE', NOW())
-                       ON DUPLICATE KEY UPDATE updated_at = NOW()""",
-                    (word, payload_json, sha),
-                )
-                conn.commit()
-            finally:
-                cur.close()
-                conn.close()
+                from mw import store as mw_store
+                conn = get_pa_mysql()
+                cur = conn.cursor()
+                try:
+                    cur.execute("SELECT dictionary_id FROM dictionary WHERE dictionary_key = 'collegiate'")
+                    row = cur.fetchone()
+                    dict_id = row[0] if row else 1
+                    mw_store.record_response(
+                        cur,
+                        dictionary_id=dict_id,
+                        submitted_text=word,
+                        payload=payload,
+                        origin="DIRECT",
+                    )
+                    conn.commit()
+                finally:
+                    cur.close()
+                    conn.close()
+            except ImportError:
+                LOG.warning("mw package not found; response saved in harbie_queue only.")
         except Exception as exc:
-            LOG.warning("Could not persist raw snapshot to snapshot table: %s", exc)
+            LOG.warning("Could not persist raw snapshot to mirror: %s", exc)
 
     worker = HarbieWorker(
         queue_store=store,
