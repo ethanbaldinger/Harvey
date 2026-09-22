@@ -43,7 +43,6 @@ def load_config() -> dict:
     candidate_paths = [
         Path(os.getenv("CONFIG_PATH", "")),
         Path("/home/badangel/mw-mirror/harvey/harbie/config.json"),
-        Path("/home/badangel/mw/config.json"),
         Path(__file__).parent / "config.json",
         Path.cwd() / "harbie" / "config.json",
         Path.cwd() / "config.json",
