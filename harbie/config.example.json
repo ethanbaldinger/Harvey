@@ -1,0 +1,15 @@
+{
+  "mw_key": "YOUR_ETHAN_COLLEGIATE_API_KEY",
+  "mysql": {
+    "host": "badangel.mysql.pythonanywhere-services.com",
+    "user": "badangel",
+    "password": "YOUR_PA_MYSQL_PASSWORD",
+    "database": "badangel$mw"
+  },
+  "burst_min": 3,
+  "burst_max": 6,
+  "burst_duration_sec": 9.0,
+  "rest_mean_sec": 80.0,
+  "rest_std_dev_sec": 10.0,
+  "rest_min_sec": 30.0
+}

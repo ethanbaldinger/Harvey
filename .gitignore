@@ -1,0 +1,28 @@
+# Credentials and secrets
+config.json
+*.env
+*.key
+*.pem
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Databases & local data
+*.sqlite3
+*.db
+*.log
+
+# Environments
+venv/
+.venv/
+env/
+
+# IDE & OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
