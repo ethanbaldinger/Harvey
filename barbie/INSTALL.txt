@@ -1,0 +1,22 @@
+BARBIE - first-round mirror replay
+
+Requires Python 3.11 or later on Windows, with python on PATH.
+1. Extract the complete ZIP into a permanent folder. Keep the barbie subfolder.
+2. Run barbie\Setup.bat once. Enter the separately supplied worker token and
+   Barbie's cache-only mirror credential. Do not use Ethan's HARVEY credential.
+3. Run barbie\Start.bat. Leave that window open while Barbie works.
+4. Before shutting down, run barbie\Stop.bat. Wait for "stopped safely" in
+   the running worker window. Ctrl+C in that window also requests a safe stop.
+
+Only previously stored responses from badangel.pythonanywhere.com/mw are used.
+No MW key is needed. This package refuses live-provider assignments.
+The worker stores responses before sending them. If the mailbox is unavailable,
+saved assignments and responses survive a restart. Lookups still need internet
+access to the mirror. Keep worker.sqlite3 and credentials.json when upgrading.
+
+A remote pause takes effect at the next successful mailbox connection. If the
+worker is disconnected, use Stop.bat on this PC to stop it immediately after
+its current request finishes. Allow for network timeouts during shutdown.
+
+credentials.json contains secrets. Do not email it, commit it, or include it
+in support screenshots. The ZIP does not contain any credentials.

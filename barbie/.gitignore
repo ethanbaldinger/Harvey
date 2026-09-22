@@ -1,0 +1,10 @@
+__pycache__/
+*.sqlite3*
+*.lock
+*.stop
+worker.json
+*.env
+*.zip
+credentials.json
+pa.private.json
+dist/

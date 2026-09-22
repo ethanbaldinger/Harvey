@@ -1,0 +1,7 @@
+{
+  "gap_min": 4,
+  "gap_max": 12,
+  "daily_limit": 1000,
+  "paused": false,
+  "provider": "mirror_replay"
+}

@@ -1,0 +1,8 @@
+{
+  "database": "worker.sqlite3",
+  "mailbox_url": "http://127.0.0.1:8765",
+  "worker_token_env": "BARBIE_WORKER_TOKEN",
+  "mirror_url": "https://badangel.pythonanywhere.com/mw",
+  "mirror_token_env": "BARBIE_MIRROR_TOKEN",
+  "mw_key_env": "BARBIE_MW_API_KEY"
+}
