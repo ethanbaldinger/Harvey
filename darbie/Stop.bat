@@ -1,7 +1,10 @@
 @echo off
 setlocal
-echo Stopping Darbie worker processes...
-taskkill /F /FI "WINDOWTITLE eq DARBIE*" 2>nul
-taskkill /F /IM python.exe /FI "IMAGENAME eq python.exe" /FI "MEMUSAGE gt 10000" 2>nul
-echo Done.
-pause
+cd /d "%~dp0"
+echo ====================================================================
+echo Stopping Remote Worker Daemon...
+echo ====================================================================
+
+taskkill /FI "WINDOWTITLE eq Remote Worker Daemon*" /F >nul 2>nul
+echo Done. If the worker window is still open, simply close it.
+timeout /t 3 >nul

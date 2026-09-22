@@ -1,9 +1,11 @@
 {
+  "worker_name": "DARBIE",
   "database": "worker.sqlite3",
   "mailbox_url": "https://badangel.pythonanywhere.com/barbie",
-  "worker_token": "PASTE_DARBIE_WORKER_TOKEN_HERE",
+  "worker_token": "worker-token-darbie-basefinder-2026",
   "mirror_url": "https://badangel.pythonanywhere.com",
-  "mirror_token": "PASTE_MIRROR_TOKEN_HERE",
-  "mw_key": "PASTE_MERRIAM_WEBSTER_API_KEY_HERE",
-  "replay_only": false
+  "mirror_token": "",
+  "mw_key": "PASTE_YOUR_MERRIAM_WEBSTER_API_KEY_HERE",
+  "replay_only": false,
+  "dynamic_slope": true
 }

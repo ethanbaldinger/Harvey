@@ -1,22 +1,24 @@
-# Darbie: Third Remote Lookup Worker
+# Darbie — Merriam-Webster Remote Lookup Worker
 
-Autonomous remote client worker for Merriam-Webster dictionary lookups.
+Welcome! This package turns this computer into an autonomous helper worker for Merriam-Webster dictionary lookups.
 
-Designed to run on a standalone laptop, communicating with PythonAnywhere over HTTPS.
+---
 
-## Architecture
+### Quick 3-Step Setup
 
-- **Worker Identity**: `DARBIE`
-- **Protocol**: HTTPS over PythonAnywhere mailbox (`https://badangel.pythonanywhere.com/barbie`)
-- **Zero Inbound Ports**: Does not require any open ports or SSH tunnels on the host machine.
-- **Dual-Lane Prioritization**:
-  - `live`: Highest priority real-time dispatches from Harvey.
-  - `reserve`: Local offline fallback pool executed when disconnected from Harvey.
-- **Safety**: Hardwired daily ceiling (1,000 calls max) and randomized human pacing (4–12s).
+1. **Extract this zip file** into a folder of your choice (e.g. `C:\Darbie`).
+2. **Double-click `Setup.bat`**:
+   - The setup wizard will open.
+   - Enter your Merriam-Webster Collegiate API key when prompted (or press Enter for test mode).
+3. **Double-click `Start.bat`**:
+   - The worker window will open and begin running.
+   - You will see lookups progress in real-time.
 
-## Deployment Instructions
+---
 
-1. Unzip `Darbie-worker.zip` to a folder on the target laptop.
-2. Double-click `Setup.bat` to input credentials (or copy `worker.example.json` to `worker.json`).
-3. Double-click `Start.bat` to launch the worker.
-4. To stop, close the terminal window or run `Stop.bat`.
+### Helpful Controls
+- **`Check_Status.bat`**: Double-click anytime to see today's completed calls, hits, and remaining quota.
+- **`Stop.bat`**: Double-click to safely shut down the worker.
+- **Safety Guarantee**: The worker has a hard ceiling of 1,000 calls per calendar day (UTC) and automatically regulates hit rate to protect your API quota.
+
+Thank you for contributing!
