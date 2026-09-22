@@ -200,16 +200,36 @@ class HarbieWorker:
             self._heartbeat("CEILING_REACHED", None)
             return None
 
-        # 4. Hoover Tripwire Evaluation
+        # 4. Dynamic Slope & Hoover Tripwire Evaluation
         hoover_threshold = ctrl.get("hoover_threshold", HOOVER_THRESHOLD)
-        if self.today_hits >= hoover_threshold:
-            if not self.hoover_tripped:
-                self.hoover_tripped = True
-                LOG.info("Hit threshold reached (%d hits >= %d). Restricting fallback to HOOVER lane.", self.today_hits, hoover_threshold)
-                try:
-                    self.store.log_event("HOOVER_TRIP", mode, f"Hit threshold reached ({self.today_hits} hits). Restricting fallback to HOOVER lane.")
-                except Exception as exc:
-                    LOG.warning("Could not log hoover trip event: %s", exc)
+        enable_dynamic_slope = ctrl.get("dynamic_slope", False)
+
+        enforce_hoover = self.today_hits >= hoover_threshold
+        target_hits = hoover_threshold
+        if not enforce_hoover and enable_dynamic_slope:
+            now_utc = datetime.now(timezone.utc)
+            seconds_elapsed = now_utc.hour * 3600 + now_utc.minute * 60 + now_utc.second
+            day_fraction = max(0.01, min(1.0, seconds_elapsed / 86400.0))
+            target_hits = int(hoover_threshold * day_fraction)
+            if self.today_hits > target_hits + 20 and self.today_hits > 40:
+                enforce_hoover = True
+
+        if enforce_hoover and not self.hoover_tripped:
+            self.hoover_tripped = True
+            LOG.info(
+                "Hit governor active (hits=%d, target=%d, hard_limit=%d). Throttling candidate lane -> HOOVER.",
+                self.today_hits, target_hits, hoover_threshold
+            )
+            try:
+                self.store.log_event("HOOVER_TRIP", mode, f"Hit governor active (hits={self.today_hits}, target={target_hits}). Throttling to HOOVER.")
+            except Exception as exc:
+                LOG.warning("Could not log hoover trip event: %s", exc)
+        elif not enforce_hoover and self.hoover_tripped and self.today_hits < hoover_threshold:
+            self.hoover_tripped = False
+            LOG.info(
+                "Hit governor relaxed (hits=%d <= target=%d). Resuming CANDIDATE discovery.",
+                self.today_hits, target_hits
+            )
 
         # 5. 3-Tier Lane Selection:
         # Tier 1: LIVE (always claimed first; real-time dispatches from Harvey)
@@ -224,8 +244,8 @@ class HarbieWorker:
                 self._heartbeat("WAITING_FOR_LIVE", None)
                 return None
 
-            # Hoover tripwire takes precedence over candidate lane
-            if self.today_hits >= hoover_threshold:
+            # Enforce hoover if tripped or above hit-rate slope
+            if enforce_hoover:
                 job = self.store.claim_next_word(LANE_HOOVER)
             else:
                 job = self.store.claim_next_word(LANE_CANDIDATE)
@@ -263,6 +283,14 @@ class HarbieWorker:
                 self.today_hits += 1
             elif result_kind == "MISS":
                 self.today_misses += 1
+
+        # Direct, immediate logging to stdout for PA Always-On Task log and bash console
+        ts_str = datetime.now().strftime("%H:%M:%S")
+        LOG.info(
+            "[%s] [%s] Lookup #%d: '%s' [%s] -> %s (Today: %d calls, %d hits, %d misses)",
+            ts_str, mode, self.today_calls, word, lane, result_kind,
+            self.today_calls, self.today_hits, self.today_misses
+        )
 
         # 9. Save to Mirror if configured
         if self.mirror_saver and outcome != "error":
