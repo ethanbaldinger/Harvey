@@ -32,6 +32,7 @@ from .common import (
     DEFAULT_PACING_SEC,
     HARD_DAILY_LIMIT,
     HOOVER_THRESHOLD,
+    LANE_LIVE,
     LANE_CANDIDATE,
     LANE_HOOVER,
     MODE_CONNECTED,
@@ -202,22 +203,34 @@ class HarbieWorker:
         # 4. Hoover Tripwire Evaluation
         hoover_threshold = ctrl.get("hoover_threshold", HOOVER_THRESHOLD)
         if self.today_hits >= hoover_threshold:
-            active_lane = LANE_HOOVER
             if not self.hoover_tripped:
                 self.hoover_tripped = True
-                LOG.info("Hit threshold reached (%d hits >= %d). Active lane: HOOVER", self.today_hits, hoover_threshold)
+                LOG.info("Hit threshold reached (%d hits >= %d). Restricting fallback to HOOVER lane.", self.today_hits, hoover_threshold)
                 try:
-                    self.store.log_event("HOOVER_TRIP", mode, f"950-hit threshold reached ({self.today_hits} hits). Switched to HOOVER lane.")
+                    self.store.log_event("HOOVER_TRIP", mode, f"Hit threshold reached ({self.today_hits} hits). Restricting fallback to HOOVER lane.")
                 except Exception as exc:
                     LOG.warning("Could not log hoover trip event: %s", exc)
-        else:
-            active_lane = LANE_CANDIDATE
 
-        # 5. Claim next word from active lane
-        job = self.store.claim_next_word(active_lane)
-        if job is None and active_lane == LANE_CANDIDATE:
-            # Candidate lane empty; check if hoover lane has words available
-            job = self.store.claim_next_word(LANE_HOOVER)
+        # 5. 3-Tier Lane Selection:
+        # Tier 1: LIVE (always claimed first; real-time dispatches from Harvey)
+        job = self.store.claim_next_word(LANE_LIVE)
+
+        # Tier 2 & 3: Fallback lanes (Candidate & Hoover)
+        if job is None:
+            # If in CONNECTED mode, check if fallback is permitted while laptop is active
+            allow_fallback_when_connected = ctrl.get("allow_fallback_when_connected", True)
+            if mode == MODE_CONNECTED and not allow_fallback_when_connected:
+                LOG.debug("Connected mode: live lane empty. Standing by for Harvey dispatches.")
+                self._heartbeat("WAITING_FOR_LIVE", None)
+                return None
+
+            # Hoover tripwire takes precedence over candidate lane
+            if self.today_hits >= hoover_threshold:
+                job = self.store.claim_next_word(LANE_HOOVER)
+            else:
+                job = self.store.claim_next_word(LANE_CANDIDATE)
+                if job is None:
+                    job = self.store.claim_next_word(LANE_HOOVER)
 
         if job is None:
             LOG.debug("No pending jobs found in queue.")
@@ -373,19 +386,25 @@ class HarbieWorker:
                     time.sleep(idle_sleep)
                 continue
 
-            # Active burst completed: take randomized Gaussian rest pause
-            rest = compute_burst_rest(self.rest_mean_sec, self.rest_std_dev_sec, self.rest_min_sec)
-            mode = self.store.determine_mode()
-            try:
-                self.store.log_event("REST", mode, f"Micro-burst resting for {rest:.1f}s", {"rest_sec": round(rest, 1)})
-            except Exception:
-                pass
-            LOG.info(
-                "Micro-burst finished: %d lookups. Resting for %.1fs (Gaussian mean=%.0fs, std=%.0fs)...",
-                len(reports),
-                rest,
-                self.rest_mean_sec,
-                self.rest_std_dev_sec,
-            )
-            if self.rest_mean_sec > 0:
+            # Distinguish between LIVE interactive jobs and background reserve bursts
+            is_live_burst = any(r.get("lane") == LANE_LIVE for r in reports if r)
+            if is_live_burst:
+                rest = random.uniform(4.0, 8.0)
+                LOG.info("Live job completed. Short gap %.1fs before next dispatch...", rest)
+            else:
+                # Active fallback burst completed: take randomized Gaussian rest pause
+                rest = compute_burst_rest(self.rest_mean_sec, self.rest_std_dev_sec, self.rest_min_sec)
+                mode = self.store.determine_mode()
+                try:
+                    self.store.log_event("REST", mode, f"Micro-burst resting for {rest:.1f}s", {"rest_sec": round(rest, 1)})
+                except Exception:
+                    pass
+                LOG.info(
+                    "Micro-burst finished: %d lookups. Resting for %.1fs (Gaussian mean=%.0fs, std=%.0fs)...",
+                    len(reports),
+                    rest,
+                    self.rest_mean_sec,
+                    self.rest_std_dev_sec,
+                )
+            if rest > 0:
                 time.sleep(rest)

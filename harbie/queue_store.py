@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .common import (
     DEFAULT_CONTROL,
     HEARTBEAT_TIMEOUT_SEC,
+    LANE_LIVE,
     LANE_CANDIDATE,
     LANE_HOOVER,
     MODE_CONNECTED,
@@ -184,10 +185,12 @@ class QueueStore:
     # Worker (Harbie / PA) APIs
     # -------------------------------------------------------------------------
 
-    def claim_next_word(self, lane: str) -> Optional[Dict[str, Any]]:
-        """Atomically claim the highest priority pending word in the given lane.
-
-        Returns dict with row info or None if lane is empty.
+    def claim_next_word(self, lane: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Atomically claim the highest-priority pending word.
+        
+        If lane is specified, claims from that lane.
+        If lane is None, enforces the 3-tier priority hierarchy:
+        LIVE (0) > CANDIDATE (1) > HOOVER (2).
         """
         p = self._param_char()
         now = utc_now()
@@ -195,15 +198,28 @@ class QueueStore:
         with self._connect() as conn:
             cur = conn.cursor()
             try:
-                # Find the next pending candidate
-                cur.execute(
-                    f"""SELECT id, word, lane, priority 
-                    FROM harbie_queue 
-                    WHERE lane = {p} AND status = {p}
-                    ORDER BY priority ASC, created_at ASC
-                    LIMIT 1""",
-                    (lane, STATUS_PENDING),
-                )
+                if lane:
+                    cur.execute(
+                        f"""SELECT id, word, lane, priority 
+                        FROM harbie_queue 
+                        WHERE lane = {p} AND status = {p}
+                        ORDER BY priority ASC, created_at ASC
+                        LIMIT 1""",
+                        (lane, STATUS_PENDING),
+                    )
+                else:
+                    cur.execute(
+                        f"""SELECT id, word, lane, priority 
+                        FROM harbie_queue 
+                        WHERE status = {p}
+                        ORDER BY CASE lane 
+                            WHEN '{LANE_LIVE}' THEN 0 
+                            WHEN '{LANE_CANDIDATE}' THEN 1 
+                            ELSE 2 END,
+                            priority ASC, created_at ASC
+                        LIMIT 1""",
+                        (STATUS_PENDING,),
+                    )
                 row = cur.fetchone()
                 if not row:
                     return None
@@ -229,6 +245,29 @@ class QueueStore:
                     "lane": item_lane,
                     "priority": priority,
                 }
+            finally:
+                cur.close()
+
+    def push_live_words(self, words: List[str], priority: int = 1) -> int:
+        """Push high-priority real-time lookup words directly into the LIVE lane."""
+        items = [{"word": w, "lane": LANE_LIVE, "priority": priority} for w in words]
+        return self.push_batch(items)
+
+    def get_lane_counts(self) -> Dict[str, int]:
+        """Return pending count for each lane."""
+        with self._connect() as conn:
+            cur = conn.cursor()
+            try:
+                cur.execute(
+                    f"""SELECT lane, count(*) 
+                    FROM harbie_queue 
+                    WHERE status = '{STATUS_PENDING}'
+                    GROUP BY lane"""
+                )
+                counts = {LANE_LIVE: 0, LANE_CANDIDATE: 0, LANE_HOOVER: 0}
+                for r in cur.fetchall():
+                    counts[r[0]] = r[1]
+                return counts
             finally:
                 cur.close()
 

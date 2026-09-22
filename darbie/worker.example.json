@@ -1,0 +1,9 @@
+{
+  "database": "worker.sqlite3",
+  "mailbox_url": "https://badangel.pythonanywhere.com/barbie",
+  "worker_token": "PASTE_DARBIE_WORKER_TOKEN_HERE",
+  "mirror_url": "https://badangel.pythonanywhere.com",
+  "mirror_token": "PASTE_MIRROR_TOKEN_HERE",
+  "mw_key": "PASTE_MERRIAM_WEBSTER_API_KEY_HERE",
+  "replay_only": false
+}

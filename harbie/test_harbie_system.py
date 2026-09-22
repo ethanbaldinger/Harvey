@@ -12,6 +12,7 @@ from pathlib import Path
 from harbie.common import (
     HARD_DAILY_LIMIT,
     HOOVER_THRESHOLD,
+    LANE_LIVE,
     LANE_CANDIDATE,
     LANE_HOOVER,
     MODE_CONNECTED,
@@ -415,6 +416,58 @@ class HarbieSystemTest(unittest.TestCase):
         self.assertIsNotNone(summary["first_event"])
         self.assertIsNotNone(summary["last_event"])
 
+    def test_18_three_tier_lane_precedence(self):
+        """Verify LIVE (Tier 1) preempts CANDIDATE (Tier 2) which preempts HOOVER (Tier 3)."""
+        # Push items out of order: HOOVER first, then CANDIDATE, then LIVE
+        self.store.push_batch([
+            {"word": "hooverword1", "lane": LANE_HOOVER, "priority": 10},
+            {"word": "hooverword2", "lane": LANE_HOOVER, "priority": 20},
+        ])
+        self.store.push_batch([
+            {"word": "candword1", "lane": LANE_CANDIDATE, "priority": 5},
+            {"word": "candword2", "lane": LANE_CANDIDATE, "priority": 15},
+        ])
+        self.store.push_live_words(["liveword1", "liveword2"])
+
+        # Check lane counts
+        counts = self.store.get_lane_counts()
+        self.assertEqual(counts[LANE_LIVE], 2)
+        self.assertEqual(counts[LANE_CANDIDATE], 2)
+        self.assertEqual(counts[LANE_HOOVER], 2)
+
+        worker = HarbieWorker(queue_store=self.store, mw_key="test_key", replay_mode=True)
+
+        # Worker step 1 & 2 must claim LIVE words
+        rep1 = worker.step()
+        self.assertEqual(rep1["word"], "liveword1")
+        self.assertEqual(rep1["lane"], LANE_LIVE)
+
+        rep2 = worker.step()
+        self.assertEqual(rep2["word"], "liveword2")
+        self.assertEqual(rep2["lane"], LANE_LIVE)
+
+        # Worker step 3 & 4 must claim CANDIDATE words (ordered by priority)
+        rep3 = worker.step()
+        self.assertEqual(rep3["word"], "candword1")
+        self.assertEqual(rep3["lane"], LANE_CANDIDATE)
+
+        rep4 = worker.step()
+        self.assertEqual(rep4["word"], "candword2")
+        self.assertEqual(rep4["lane"], LANE_CANDIDATE)
+
+        # Worker step 5 & 6 must claim HOOVER words (ordered by priority)
+        rep5 = worker.step()
+        self.assertEqual(rep5["word"], "hooverword1")
+        self.assertEqual(rep5["lane"], LANE_HOOVER)
+
+        rep6 = worker.step()
+        self.assertEqual(rep6["word"], "hooverword2")
+        self.assertEqual(rep6["lane"], LANE_HOOVER)
+
+        # Queue should now be empty
+        self.assertIsNone(worker.step())
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -67,8 +67,12 @@ def print_status(store: QueueStore):
         print(f" Last Word Processed : '{hb.get('word') or 'none'}' [{hb.get('lane', 'unknown')}] -> {hb.get('result_kind', 'unknown')}")
     else:
         print(" Worker Live State   : No heartbeat recorded yet (Worker not running or starting up)")
+    lane_counts = store.get_lane_counts()
     print("-" * 65)
-    print(f" Queue Backlog       : {stats}")
+    print(" 3-TIER QUEUE BACKLOG:")
+    print(f"   [Tier 1] LIVE (Real-Time Preempt)    : {lane_counts.get('LIVE', 0):,} pending")
+    print(f"   [Tier 2] CANDIDATE (Active Reserve)  : {lane_counts.get('CANDIDATE', 0):,} pending")
+    print(f"   [Tier 3] HOOVER (16+ Deep Cushion)   : {lane_counts.get('HOOVER', 0):,} pending")
     print("=" * 65 + "\n")
 
 
@@ -157,6 +161,7 @@ def print_night_summary(store: QueueStore):
 
 def main():
     parser = argparse.ArgumentParser(description="Harbie remote control, live observer, and audit logger")
+    parser.add_argument("--push-live", nargs="+", help="Push one or more words into the highest-priority LIVE lane for immediate lookup")
     parser.add_argument("--force-offline", action="store_true", help="Force Harbie into OFFLINE mode for testing while laptop is connected")
     parser.add_argument("--auto", action="store_true", help="Restore normal automatic heartbeat detection (clears forced mode)")
     parser.add_argument("--force-connected", action="store_true", help="Force Harbie into CONNECTED mode")
@@ -175,7 +180,14 @@ def main():
 
     store = get_store(args)
 
-    if args.force_offline:
+    if args.push_live:
+        clean_words = [w.strip().lower() for w in args.push_live if w.strip()]
+        inserted = store.push_live_words(clean_words)
+        store.update_harvey_heartbeat()
+        print(f"\n[OK] Pushed {len(clean_words)} words to LIVE lane (newly inserted: {inserted}).")
+        print(f"     Words: {clean_words}\n")
+        print_status(store)
+    elif args.force_offline:
         store.set_forced_mode(MODE_OFFLINE)
         print("\n[OK] Harbie forced into OFFLINE TEST MODE. You can now observe its offline micro-bursts live!\n")
         print_status(store)

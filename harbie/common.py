@@ -33,8 +33,17 @@ REST_MIN_SEC = 30.0         # Absolute minimum safety floor for rest pause (seco
 DEFAULT_PACING_SEC = 80
 DEFAULT_JITTER_PCT = 15
 
-LANE_CANDIDATE = "CANDIDATE"
-LANE_HOOVER = "HOOVER"
+# 3-Tier Execution Lanes
+LANE_LIVE = "LIVE"              # Priority 1: Real-time Harvey graph dispatches (preempts all)
+LANE_CANDIDATE = "CANDIDATE"    # Priority 2: Fresh graph fringe candidates (multi-day reserve)
+LANE_HOOVER = "HOOVER"          # Priority 3: 16+ letter bottomless words (longest-first shock absorber)
+
+LANE_ORDER = (LANE_LIVE, LANE_CANDIDATE, LANE_HOOVER)
+LANE_PRIORITIES = {
+    LANE_LIVE: 0,
+    LANE_CANDIDATE: 1,
+    LANE_HOOVER: 2,
+}
 
 STATUS_PENDING = "PENDING"
 STATUS_IN_FLIGHT = "IN_FLIGHT"

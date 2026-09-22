@@ -1,5 +1,7 @@
 # Credentials and secrets
 config.json
+worker.json
+credentials.json
 *.env
 *.key
 *.pem
